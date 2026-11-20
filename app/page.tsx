@@ -9,7 +9,7 @@ export default function HostPage() {
   const [room, setRoom] = useState<any>({ status: 'lobby' });
   const [players, setPlayers] = useState<any[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioStatus, setAudioStatus] = useState<string>('');
   const [showAnswer, setShowAnswer] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -55,19 +55,26 @@ export default function HostPage() {
   const startRound = async (idx: number) => {
     setShowAnswer(false);
     setDbError(null);
+    setAudioStatus('Caricamento brano...');
+
+    // Sblocca subito il permesso audio del browser al momento del clic
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      audioRef.current.play().catch(() => {});
+    }
+
     const q = QUESTIONS[idx % QUESTIONS.length];
     let preview: string | null = null;
 
     try {
-      const res = await fetch(`https://apple.com{encodeURIComponent(q.query)}&entity=song&limit=1`);
+      const res = await fetch(`https://apple.com{encodeURIComponent(q.query)}&country=IT&media=music&entity=song&limit=3`);
       const json = await res.json();
       const firstSong = Array.isArray(json.results) ? json.results.find((item: any) => item.previewUrl) : null;
       preview = firstSong ? firstSong.previewUrl : null;
     } catch {
-      setDbError('Audio anteprima non disponibile, controlla il titolo manualmente');
+      setAudioStatus('Errore rete audio: premi Play manualmente qui sotto');
     }
-
-    setAudioUrl(preview);
 
     const nextRoomState = {
       status: 'playing',
@@ -84,7 +91,17 @@ export default function HostPage() {
     }
 
     setRoom((prev: any) => ({ ...prev, ...nextRoomState }));
-    setTimeout(() => { audioRef.current?.play().catch(() => {}); }, 300);
+
+    if (preview && audioRef.current) {
+      audioRef.current.src = preview;
+      audioRef.current.load();
+      audioRef.current
+        .play()
+        .then(() => setAudioStatus('Brano in riproduzione!'))
+        .catch(() => setAudioStatus('Premi il tasto Play sulla barra qui sotto per avviare la musica'));
+    } else {
+      setAudioStatus('Anteprima non trovata per questo brano');
+    }
   };
 
   const handleScore = async (correct: boolean) => {
@@ -119,6 +136,12 @@ export default function HostPage() {
         )}
       </header>
 
+      {/* Lettore audio sempre montato per mantenere lo sblocco del browser */}
+      <div className={room?.status === 'lobby' ? 'hidden' : 'w-full max-w-md text-center my-2'}>
+        <audio ref={audioRef} controls className="w-full rounded-xl" />
+        {audioStatus && <p className="text-xs text-amber-200 mt-1">{audioStatus}</p>}
+      </div>
+
       {room?.status === 'lobby' && (
         <div className="bg-white/10 backdrop-blur-md p-8 rounded-3xl flex flex-col md:flex-row items-center gap-10 border border-white/20">
           <div className="bg-white p-4 rounded-2xl">
@@ -150,10 +173,6 @@ export default function HostPage() {
           <span className="bg-amber-400 text-red-950 font-bold px-4 py-1 rounded-full text-sm uppercase">
             Round {room.current_round} • Epoca: Anni {room.current_era}
           </span>
-
-          {audioUrl && (
-            <audio ref={audioRef} src={audioUrl} controls autoPlay className="mx-auto mt-6" />
-          )}
 
           {room.status === 'playing' && (
             <div className="my-8">
