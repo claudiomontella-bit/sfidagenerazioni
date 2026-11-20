@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { supabase, QUESTIONS } from '../lib/supabase';
+import { QUESTIONS } from '../lib/supabase';
 import { Trophy, Volume2, Sparkles, Check, X, SkipForward, Award } from 'lucide-react';
 
 export default function HostPage() {
@@ -15,74 +15,54 @@ export default function HostPage() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastStatusRef = useRef<string>('lobby');
+
+  const callApi = async (payload: any) => {
+    const res = await fetch('/api/game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  };
 
   useEffect(() => {
-    const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5);
-    setDeck(shuffled);
+    setDeck([...QUESTIONS].sort(() => Math.random() - 0.5));
 
-    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    setRoomCode(code);
-
-    supabase
-      .from('rooms')
-      .insert({ id: code, status: 'lobby' })
-      .select()
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          setDbError(error.message);
-        } else if (data) {
-          setRoom(data);
-        }
-      });
-
-    const channel = supabase
-      .channel(`room-${code}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${code}` }, (payload) => {
-        setRoom(payload.new);
-        if ((payload.new as any).status === 'buzzed' && audioRef.current) {
-          audioRef.current.pause();
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${code}` }, () => {
-        fetchPlayers(code);
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    callApi({ action: 'create' }).then((res) => {
+      if (res.error) {
+        setDbError(res.error);
+      } else if (res.room) {
+        setRoomCode(res.room.id);
+        setRoom(res.room);
+      }
+    });
   }, []);
 
-  const fetchPlayers = async (code: string) => {
-    const { data } = await supabase.from('players').select('*').eq('room_id', code).order('score', { ascending: false });
-    if (data) setPlayers(data);
-  };
+  useEffect(() => {
+    if (!roomCode) return;
 
-  const findPreviewUrl = async (query: string): Promise<string | null> => {
-    const base = 'https://' + '://apple.com' + '/search?term=' + encodeURIComponent(query);
-    const urls = [
-      base + '&entity=song&limit=5',
-      base + '&country=IT&entity=song&limit=5',
-    ];
-
-    for (const url of urls) {
-      try {
-        const res = await fetch(url);
-        const json = await res.json();
-        const match = Array.isArray(json.results)
-          ? json.results.find((item: any) => typeof item.previewUrl === 'string' && item.previewUrl.startsWith('http'))
-          : null;
-        if (match) return match.previewUrl;
-      } catch {
-        // Prova il prossimo catalogo
+    const timer = setInterval(async () => {
+      const res = await callApi({ action: 'state', code: roomCode });
+      if (res.room) {
+        if (res.room.status === 'buzzed' && lastStatusRef.current !== 'buzzed' && audioRef.current) {
+          audioRef.current.pause();
+        }
+        lastStatusRef.current = res.room.status;
+        setRoom(res.room);
       }
-    }
-    return null;
-  };
+      if (Array.isArray(res.players)) {
+        setPlayers(res.players);
+      }
+    }, 1500);
+
+    return () => clearInterval(timer);
+  }, [roomCode]);
 
   const startRound = async (idx: number) => {
     setShowAnswer(false);
     setDbError(null);
-    setAudioStatus('Ricerca brano in corso...');
+    setAudioStatus('Caricamento brano...');
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -94,26 +74,25 @@ export default function HostPage() {
     const q = activeDeck[idx % activeDeck.length];
     setCurrentCategory(q.category || 'Musica');
 
-    const preview = await findPreviewUrl(q.query);
+    const res = await callApi({
+      action: 'start',
+      code: roomCode,
+      round: idx + 1,
+      question: q,
+    });
 
-    const nextRoomState = {
-      status: 'playing',
-      current_round: idx + 1,
-      buzzed_player_id: null,
-      current_song_query: q.answer,
-      current_era: q.era,
-    };
-
-    const { error } = await supabase.from('rooms').update(nextRoomState).eq('id', roomCode);
-    if (error) {
-      setDbError(error.message);
+    if (res.error) {
+      setDbError(res.error);
       return;
     }
 
-    setRoom((prev: any) => ({ ...prev, ...nextRoomState }));
+    if (res.room) {
+      lastStatusRef.current = 'playing';
+      setRoom(res.room);
+    }
 
-    if (preview && audioRef.current) {
-      audioRef.current.src = preview;
+    if (res.previewUrl && audioRef.current) {
+      audioRef.current.src = res.previewUrl;
       audioRef.current.load();
       audioRef.current
         .play()
@@ -128,12 +107,17 @@ export default function HostPage() {
     const buzzer = players.find((p) => p.id === room?.buzzed_player_id);
     if (correct && buzzer) {
       const isCrossGen = buzzer.era !== room.current_era;
-      const points = isCrossGen ? 200 : 100;
-      await supabase.from('players').update({ score: buzzer.score + points }).eq('id', buzzer.id);
-      fetchPlayers(roomCode);
+      await callApi({
+        action: 'score',
+        code: roomCode,
+        correct: true,
+        playerId: buzzer.id,
+        isCrossGen,
+      });
       setShowAnswer(true);
     } else {
-      await supabase.from('rooms').update({ status: 'playing', buzzed_player_id: null }).eq('id', roomCode);
+      await callApi({ action: 'score', code: roomCode, correct: false });
+      lastStatusRef.current = 'playing';
       setRoom((prev: any) => ({ ...prev, status: 'playing', buzzed_player_id: null }));
       audioRef.current?.play().catch(() => {});
     }
@@ -141,7 +125,8 @@ export default function HostPage() {
 
   const finishGame = async () => {
     if (audioRef.current) audioRef.current.pause();
-    await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomCode);
+    await callApi({ action: 'finish', code: roomCode });
+    lastStatusRef.current = 'finished';
     setRoom((prev: any) => ({ ...prev, status: 'finished' }));
   };
 
@@ -154,7 +139,9 @@ export default function HostPage() {
         <h1 className="text-4xl font-extrabold tracking-tight flex items-center justify-center gap-3">
           <Sparkles className="text-amber-400" /> SFIDA GENERAZIONI <Sparkles className="text-amber-400" />
         </h1>
-        <p className="text-red-200 mt-1">Codice Stanza: <span className="font-mono font-bold text-2xl text-amber-300">{roomCode}</span></p>
+        <p className="text-red-200 mt-1">
+          Codice Stanza: <span className="font-mono font-bold text-2xl text-amber-300">{roomCode || '...'}</span>
+        </p>
         {dbError && (
           <p className="mt-2 bg-black/60 text-amber-300 px-4 py-2 rounded-lg text-sm font-mono">
             Avviso: {dbError}
@@ -233,3 +220,23 @@ export default function HostPage() {
                   <button onClick={() => handleScore(true)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
                     <Check /> Indovinato!
                   </button>
+                  <button onClick={() => handleScore(false)} className="bg-red-700 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+                    <X /> Sbagliato
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showAnswer && (
+            <div className="mt-6">
+              <p className="text-xl font-bold text-emerald-300 mb-4">Soluzione: {room.current_song_query}</p>
+              <div className="flex justify-center gap-4 flex-wrap">
+                <button
+                  onClick={() => { const next = questionIndex + 1; setQuestionIndex(next); startRound(next); }}
+                  className="bg-white text-red-950 font-black px-8 py-3 rounded-xl text-lg"
+                >
+                  Prossimo Round →
+                </button>
+                <button
+                  onClick={finishGame}
