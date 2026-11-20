@@ -57,7 +57,8 @@ export default function HostPage() {
     const q = QUESTIONS[idx % QUESTIONS.length];
     const res = await fetch(`https://apple.com{encodeURIComponent(q.query)}&entity=song&limit=1`);
     const json = await res.json();
-    const preview = json.results?.?.previewUrl || null;
+    const firstSong = Array.isArray(json.results) ? json.results.find((item: any) => item.previewUrl) : null;
+    const preview = firstSong ? firstSong.previewUrl : null;
     setAudioUrl(preview);
 
     await supabase.from('rooms').update({
