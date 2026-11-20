@@ -11,32 +11,16 @@ export default function PlayerController() {
   const [room, setRoom] = useState<any>(null);
 
   useEffect(() => {
-    supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', code)
-      .single()
-      .then(({ data }) => setRoom(data));
+    supabase.from('rooms').select('*').eq('id', code).single().then(({ data }) => setRoom(data));
 
     const channel = supabase
       .channel(`player-room-${code}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'rooms',
-          filter: `id=eq.${code}`,
-        },
-        (payload) => {
-          setRoom(payload.new);
-        }
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${code}` }, (payload) => {
+        setRoom(payload.new);
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [code]);
 
   const joinGame = async (e: React.FormEvent) => {
@@ -62,9 +46,7 @@ export default function PlayerController() {
   if (!playerId) {
     return (
       <div className="min-h-screen bg-red-950 text-white p-6 flex flex-col justify-center">
-        <h1 className="text-2xl font-black text-center mb-6">
-          Entra nella Stanza {code}
-        </h1>
+        <h1 className="text-2xl font-black text-center mb-6">Entra nella Stanza {code}</h1>
         <form onSubmit={joinGame} className="space-y-4 max-w-sm mx-auto w-full">
           <input
             type="text"
@@ -75,24 +57,19 @@ export default function PlayerController() {
             required
           />
           <div>
-            <label className="block text-sm mb-2 text-red-200">
-              La tua generazione di riferimento:
-            </label>
+            <label className="block text-sm mb-2 text-red-200">La tua generazione di riferimento:</label>
             <select
               value={era}
               onChange={(e) => setEra(e.target.value)}
               className="w-full p-4 rounded-xl text-black font-bold text-lg"
             >
-              <option value="50-60">Anni '50 - '60 (Classici)</option>
-              <option value="70-80">Anni '70 - '80 (Cult & Disco)</option>
-              <option value="90-00">Anni '90 - 2000 (Nostalgia)</option>
+              <option value="50-60">Anni 50 - 60 (Classici)</option>
+              <option value="70-80">Anni 70 - 80 (Cult e Disco)</option>
+              <option value="90-00">Anni 90 - 2000 (Nostalgia)</option>
               <option value="GenZ">Gen Z / Moderni</option>
             </select>
           </div>
-          <button
-            type="submit"
-            className="w-full bg-amber-400 text-red-950 font-black py-4 rounded-xl text-xl"
-          >
+          <button type="submit" className="w-full bg-amber-400 text-red-950 font-black py-4 rounded-xl text-xl">
             ENTRA IN PARTITA
           </button>
         </form>
@@ -107,9 +84,7 @@ export default function PlayerController() {
       <p className="text-amber-300 font-bold mb-8 text-lg">Giocatore: {name}</p>
 
       {room?.status === 'lobby' && (
-        <p className="text-xl animate-pulse">
-          In attesa che l'organizzatore avvii la partita...
-        </p>
+        <p className="text-xl animate-pulse">In attesa che inizi la partita...</p>
       )}
 
       {room?.status === 'playing' && (
@@ -122,15 +97,9 @@ export default function PlayerController() {
       )}
 
       {room?.status === 'buzzed' && (
-        <div
-          className={`p-8 rounded-3xl ${
-            isMyBuzz ? 'bg-emerald-600' : 'bg-white/10'
-          }`}
-        >
+        <div className={`p-8 rounded-3xl ${isMyBuzz ? 'bg-emerald-600' : 'bg-white/10'}`}>
           <p className="text-2xl font-black">
-            {isMyBuzz
-              ? 'TOCCA A TE! RISPONDI AD ALTA VOCE!'
-              : 'Qualcuno è stato più veloce di te!'}
+            {isMyBuzz ? 'TOCCA A TE! RISPONDI AD ALTA VOCE!' : 'Qualcuno ha prenotato prima di te!'}
           </p>
         </div>
       )}
