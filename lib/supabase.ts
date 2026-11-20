@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export const supabase = createClient(
   'https://imuvluzcxskkymjadywh.supabase.co',
-  'sb_publishable_4cALJchVVAOp3FLCVBbIuQ_D6L_DL4Q'
+  'sb_publishable_4eALJchVVAOp3FLCVBbIuQ_D6l_DL4Q'
 );
 
 export const QUESTIONS = [
