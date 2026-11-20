@@ -57,7 +57,6 @@ export default function HostPage() {
     setDbError(null);
     setAudioStatus('Caricamento brano...');
 
-    // Sblocca subito il permesso audio del browser al momento del clic
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
@@ -68,12 +67,11 @@ export default function HostPage() {
     let preview: string | null = null;
 
     try {
-      const res = await fetch(`https://apple.com{encodeURIComponent(q.query)}&country=IT&media=music&entity=song&limit=3`);
+      const res = await fetch(`/api/audio?q=${encodeURIComponent(q.query)}`);
       const json = await res.json();
-      const firstSong = Array.isArray(json.results) ? json.results.find((item: any) => item.previewUrl) : null;
-      preview = firstSong ? firstSong.previewUrl : null;
+      preview = json.previewUrl || null;
     } catch {
-      setAudioStatus('Errore rete audio: premi Play manualmente qui sotto');
+      setAudioStatus('Errore rete audio');
     }
 
     const nextRoomState = {
@@ -98,9 +96,9 @@ export default function HostPage() {
       audioRef.current
         .play()
         .then(() => setAudioStatus('Brano in riproduzione!'))
-        .catch(() => setAudioStatus('Premi il tasto Play sulla barra qui sotto per avviare la musica'));
+        .catch(() => setAudioStatus('Premi Play sulla barra qui sotto'));
     } else {
-      setAudioStatus('Anteprima non trovata per questo brano');
+      setAudioStatus('Anteprima non disponibile per questo brano');
     }
   };
 
@@ -136,7 +134,6 @@ export default function HostPage() {
         )}
       </header>
 
-      {/* Lettore audio sempre montato per mantenere lo sblocco del browser */}
       <div className={room?.status === 'lobby' ? 'hidden' : 'w-full max-w-md text-center my-2'}>
         <audio ref={audioRef} controls className="w-full rounded-xl" />
         {audioStatus && <p className="text-xs text-amber-200 mt-1">{audioStatus}</p>}
