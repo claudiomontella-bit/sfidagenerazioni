@@ -54,22 +54,37 @@ export default function HostPage() {
 
   const startRound = async (idx: number) => {
     setShowAnswer(false);
+    setDbError(null);
     const q = QUESTIONS[idx % QUESTIONS.length];
-    const res = await fetch(`https://apple.com{encodeURIComponent(q.query)}&entity=song&limit=1`);
-    const json = await res.json();
-    const firstSong = Array.isArray(json.results) ? json.results.find((item: any) => item.previewUrl) : null;
-    const preview = firstSong ? firstSong.previewUrl : null;
+    let preview: string | null = null;
+
+    try {
+      const res = await fetch(`https://apple.com{encodeURIComponent(q.query)}&entity=song&limit=1`);
+      const json = await res.json();
+      const firstSong = Array.isArray(json.results) ? json.results.find((item: any) => item.previewUrl) : null;
+      preview = firstSong ? firstSong.previewUrl : null;
+    } catch {
+      setDbError('Audio anteprima non disponibile, controlla il titolo manualmente');
+    }
+
     setAudioUrl(preview);
 
-    await supabase.from('rooms').update({
+    const nextRoomState = {
       status: 'playing',
       current_round: idx + 1,
       buzzed_player_id: null,
       current_song_query: q.answer,
       current_era: q.era,
-    }).eq('id', roomCode);
+    };
 
-    setTimeout(() => { audioRef.current?.play(); }, 300);
+    const { error } = await supabase.from('rooms').update(nextRoomState).eq('id', roomCode);
+    if (error) {
+      setDbError(error.message);
+      return;
+    }
+
+    setRoom((prev: any) => ({ ...prev, ...nextRoomState }));
+    setTimeout(() => { audioRef.current?.play().catch(() => {}); }, 300);
   };
 
   const handleScore = async (correct: boolean) => {
@@ -78,10 +93,12 @@ export default function HostPage() {
       const isCrossGen = buzzer.era !== room.current_era;
       const points = isCrossGen ? 200 : 100;
       await supabase.from('players').update({ score: buzzer.score + points }).eq('id', buzzer.id);
+      fetchPlayers(roomCode);
       setShowAnswer(true);
     } else {
       await supabase.from('rooms').update({ status: 'playing', buzzed_player_id: null }).eq('id', roomCode);
-      audioRef.current?.play();
+      setRoom((prev: any) => ({ ...prev, status: 'playing', buzzed_player_id: null }));
+      audioRef.current?.play().catch(() => {});
     }
   };
 
@@ -97,7 +114,7 @@ export default function HostPage() {
         <p className="text-red-200 mt-1">Codice Stanza: <span className="font-mono font-bold text-2xl text-amber-300">{roomCode}</span></p>
         {dbError && (
           <p className="mt-2 bg-black/60 text-amber-300 px-4 py-2 rounded-lg text-sm font-mono">
-            Avviso Database: {dbError}
+            Avviso: {dbError}
           </p>
         )}
       </header>
@@ -134,17 +151,19 @@ export default function HostPage() {
             Round {room.current_round} • Epoca: Anni {room.current_era}
           </span>
 
-          {audioUrl && <audio ref={audioRef} src={audioUrl} />}
+          {audioUrl && (
+            <audio ref={audioRef} src={audioUrl} controls autoPlay className="mx-auto mt-6" />
+          )}
 
           {room.status === 'playing' && (
-            <div className="my-10">
-              <Volume2 className="w-20 h-20 mx-auto text-amber-300 animate-pulse" />
+            <div className="my-8">
+              <Volume2 className="w-16 h-16 mx-auto text-amber-300 animate-pulse" />
               <p className="text-2xl font-bold mt-4">Ascolta e premi il pulsante sul tuo telefono!</p>
             </div>
           )}
 
           {room.status === 'buzzed' && buzzedPlayer && (
-            <div className="my-8 bg-amber-400 text-red-950 p-6 rounded-2xl animate-bounce">
+            <div className="my-8 bg-amber-400 text-red-950 p-6 rounded-2xl">
               <p className="text-sm uppercase font-bold">Si è prenotato per primo:</p>
               <p className="text-4xl font-black my-2">{buzzedPlayer.name}</p>
               {buzzedPlayer.era !== room.current_era && (
