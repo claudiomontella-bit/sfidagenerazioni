@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { QUESTIONS } from '../lib/supabase';
 
 export default function HostPage() {
@@ -107,7 +108,6 @@ export default function HostPage() {
   };
 
   const joinUrl = typeof window !== 'undefined' && roomCode ? `${window.location.origin}/play/${roomCode}` : '';
-  const qrSrc = joinUrl ? `https://qrserver.com{encodeURIComponent(joinUrl)}` : '';
   const buzzedPlayer = players.find((p) => p.id === room?.buzzed_player_id);
 
   return (
@@ -128,7 +128,7 @@ export default function HostPage() {
       {room?.status === 'lobby' && (
         <div className="bg-white/10 p-8 rounded-3xl flex flex-col md:flex-row items-center gap-10 border border-white/20">
           <div className="bg-white p-4 rounded-2xl">
-            {qrSrc && <img src={qrSrc} alt="QR Code" width={200} height={200} />}
+            {joinUrl && <QRCodeSVG value={joinUrl} size={200} />}
           </div>
           <div className="max-w-md">
             <h2 className="text-2xl font-bold mb-2">Inquadra per entrare!</h2>
@@ -229,3 +229,5 @@ export default function HostPage() {
                 <span>{i + 1}. {p.name} ({p.era})</span>
                 <span>{p.score} pt</span>
               </div>
+            ))}
+          </div>
