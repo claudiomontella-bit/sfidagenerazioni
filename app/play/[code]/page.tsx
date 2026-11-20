@@ -1,46 +1,46 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase } from '../../../lib/supabase';
 
 export default function PlayerController() {
-  const { code } = useParams<{ code: string }>();
+  const params = useParams<{ code: string }>();
+  const code = (params?.code || '').toUpperCase();
   const [name, setName] = useState('');
   const [era, setEra] = useState('90-00');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [room, setRoom] = useState<any>(null);
 
+  const callApi = async (payload: any) => {
+    const res = await fetch('/api/game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  };
+
   useEffect(() => {
-    supabase.from('rooms').select('*').eq('id', code).single().then(({ data }) => setRoom(data));
-
-    const channel = supabase
-      .channel(`player-room-${code}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${code}` }, (payload) => {
-        setRoom(payload.new);
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    if (!code) return;
+    const sync = async () => {
+      const res = await callApi({ action: 'state', code });
+      if (res.room) setRoom(res.room);
+    };
+    sync();
+    const timer = setInterval(sync, 1200);
+    return () => clearInterval(timer);
   }, [code]);
 
   const joinGame = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    const { data } = await supabase
-      .from('players')
-      .insert({ room_id: code, name: name.trim(), era })
-      .select()
-      .single();
-    if (data) setPlayerId(data.id);
+    if (!name.trim() || !code) return;
+    const res = await callApi({ action: 'join', code, name: name.trim(), era });
+    if (res.player) setPlayerId(res.player.id);
   };
 
   const buzz = async () => {
     if (room?.status !== 'playing' || !playerId) return;
-    await supabase
-      .from('rooms')
-      .update({ status: 'buzzed', buzzed_player_id: playerId })
-      .eq('id', code)
-      .eq('status', 'playing');
+    setRoom((prev: any) => ({ ...prev, status: 'buzzed', buzzed_player_id: playerId }));
+    await callApi({ action: 'buzz', code, playerId });
   };
 
   if (!playerId) {
@@ -82,26 +82,24 @@ export default function PlayerController() {
   return (
     <div className="min-h-screen bg-red-950 text-white p-6 flex flex-col items-center justify-center text-center">
       <p className="text-amber-300 font-bold mb-8 text-lg">Giocatore: {name}</p>
-
-      {room?.status === 'lobby' && (
-        <p className="text-xl animate-pulse">In attesa che inizi la partita...</p>
-      )}
-
+      {room?.status === 'lobby' && <p className="text-xl">In attesa che inizi la partita...</p>}
       {room?.status === 'playing' && (
         <button
           onClick={buzz}
-          className="w-64 h-64 rounded-full bg-red-600 active:bg-red-500 border-8 border-amber-400 shadow-2xl flex items-center justify-center text-3xl font-black uppercase tracking-wider active:scale-95 transition"
+          className="w-64 h-64 rounded-full bg-red-600 border-8 border-amber-400 shadow-2xl flex items-center justify-center text-3xl font-black uppercase"
         >
           PRENOTA!
         </button>
       )}
-
       {room?.status === 'buzzed' && (
         <div className={`p-8 rounded-3xl ${isMyBuzz ? 'bg-emerald-600' : 'bg-white/10'}`}>
           <p className="text-2xl font-black">
             {isMyBuzz ? 'TOCCA A TE! RISPONDI AD ALTA VOCE!' : 'Qualcuno ha prenotato prima di te!'}
           </p>
         </div>
+      )}
+      {room?.status === 'finished' && (
+        <p className="text-2xl font-black text-amber-300">Partita terminata! Guarda la classifica sullo schermo.</p>
       )}
     </div>
   );
