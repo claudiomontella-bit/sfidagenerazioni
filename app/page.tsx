@@ -58,9 +58,10 @@ export default function HostPage() {
   };
 
   const findPreviewUrl = async (query: string): Promise<string | null> => {
+    const base = 'https://' + '://apple.com' + '/search?term=' + encodeURIComponent(query);
     const urls = [
-      `https://apple.com{encodeURIComponent(query)}&entity=song&limit=5`,
-      `https://apple.com{encodeURIComponent(query)}&country=IT&entity=song&limit=5`,
+      base + '&entity=song&limit=5',
+      base + '&country=IT&entity=song&limit=5',
     ];
 
     for (const url of urls) {
