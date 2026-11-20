@@ -17,7 +17,6 @@ export default function HostPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Mescola i 64 brani ad ogni nuova stanza
     const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5);
     setDeck(shuffled);
 
@@ -231,3 +230,5 @@ export default function HostPage() {
               {!showAnswer && (
                 <div className="flex justify-center gap-4 mt-6">
                   <button onClick={() => handleScore(true)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+                    <Check /> Indovinato!
+                  </button>
