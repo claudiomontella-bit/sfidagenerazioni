@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function GameBoard({
@@ -6,6 +7,12 @@ export default function GameBoard({
   showAnswer, dbError, audioRef, joinUrl, onStartRound,
   onSkip, onScore, onFinish
 }: any) {
+  const [peekAnswer, setPeekAnswer] = useState(false);
+
+  useEffect(() => {
+    setPeekAnswer(false);
+  }, [room?.current_round, room?.status]);
+
   const buzzedPlayer = players.find((p: any) => p.id === room?.buzzed_player_id);
 
   return (
@@ -61,9 +68,19 @@ export default function GameBoard({
           {room.status === 'playing' && (
             <div className="my-8">
               <p className="text-2xl font-bold mt-4">Ascolta e premi il pulsante sul tuo telefono!</p>
-              <button onClick={onSkip} className="mt-6 bg-white/20 text-white px-4 py-2 rounded-xl text-sm">
-                Salta Brano
-              </button>
+              <div className="flex justify-center gap-3 mt-6 flex-wrap">
+                <button onClick={() => setPeekAnswer(!peekAnswer)} className="bg-black/40 text-amber-200 px-4 py-2 rounded-xl text-sm">
+                  {peekAnswer ? 'Nascondi Titolo' : 'Svela Titolo (Arbitro)'}
+                </button>
+                <button onClick={onSkip} className="bg-white/20 text-white px-4 py-2 rounded-xl text-sm">
+                  Salta Brano
+                </button>
+              </div>
+              {peekAnswer && (
+                <p className="mt-4 bg-black/60 text-amber-300 font-bold px-4 py-2 rounded-xl inline-block">
+                  {room.current_song_query}
+                </p>
+              )}
             </div>
           )}
 
@@ -77,9 +94,21 @@ export default function GameBoard({
                 </span>
               )}
               {!showAnswer && (
-                <div className="flex justify-center gap-4 mt-6">
-                  <button onClick={() => onScore(true)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold">Indovinato!</button>
-                  <button onClick={() => onScore(false)} className="bg-red-700 text-white px-6 py-3 rounded-xl font-bold">Sbagliato</button>
+                <div className="mt-6">
+                  <div className="flex justify-center gap-4">
+                    <button onClick={() => onScore(true)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold">Indovinato!</button>
+                    <button onClick={() => onScore(false)} className="bg-red-700 text-white px-6 py-3 rounded-xl font-bold">Sbagliato</button>
+                  </div>
+                  <div className="mt-4">
+                    <button onClick={() => setPeekAnswer(!peekAnswer)} className="bg-red-950/20 text-red-950 px-4 py-1.5 rounded-lg text-xs font-bold underline">
+                      {peekAnswer ? 'Nascondi soluzione' : 'Svela soluzione per l arbitro'}
+                    </button>
+                    {peekAnswer && (
+                      <p className="mt-2 bg-red-950 text-amber-300 font-bold px-4 py-2 rounded-xl text-sm">
+                        {room.current_song_query}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
