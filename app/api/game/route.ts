@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { QUESTIONS } from '../../../lib/supabase';
+import { supabase as serverSupabase, QUESTIONS } from '../../../lib/supabase';
 
-const serverSupabase = createClient(
-  'https://' + 'imuvluzcxskkymjadywh' + '.supabase.co',
-  'sb_publishable_4cALJchVVAOp3FLCVBbIuQ_D6L_DL4Q'
-);
 
 async function searchAudioPreview(query: string): Promise<string | null> {
   const deezerHost = ['api', 'deezer', 'com'].join('.');
